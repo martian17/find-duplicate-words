@@ -1,7 +1,7 @@
 let NoDupArray = require("./NoDupArray.js");
 let {newarr,getSecondMax} = require("./utils.js");
-
-
+let fs = require("fs");
+let {toJSON,fromJSON,toJSONCompress} = require("./conversion.js");
 
 class Node{
     children = [];//if edge node this will be empty
@@ -26,8 +26,7 @@ class Node{
 let findsubstrs = function(str0){
     let root = new Node(str0);
     let leafs = [root];
-    console.log(leafs);
-    let histogram = [];
+    //console.log(leafs);
     
     for(let width = Math.floor(str0.length/2); width > 0; width--){
         console.log("width: ",width);
@@ -77,7 +76,7 @@ let findsubstrs = function(str0){
             }
         });
         
-        let duplicateFlag = false;
+        //let duplicateFlag = false;
         //mapping the locations to child nodes
         for(let dup of duplicates){
             //sorting locations
@@ -112,11 +111,10 @@ let findsubstrs = function(str0){
             if(dup.locations.length < 2){
                 continue;//not big enough
             }
-            duplicateFlag = true;
+            //duplicateFlag = true;
             //                    //parent node pointer     slicing parent node pointer
             let subnodestr = leafs[dup.locations[0][0]].str.slice(dup.locations[0][1],dup.locations[0][1]+width);
             let subnode = new Node(subnodestr);
-            histogram.push(subnode);
             for(let [nodeptr,i] of dup.locations){
                 let node = leafs[nodeptr];
                 node.setStates(i-width+1,width*2-1);//blanking out the section it occupies plus the width offset before so it doesn't collide
@@ -124,11 +122,11 @@ let findsubstrs = function(str0){
             }
         }
         
-        if(duplicateFlag){
-            console.log(duplicates,duplicates[0].locations);
-        }
+        //if(duplicateFlag){
+        //    console.log(duplicates,duplicates[0].locations);
+        //}
         
-        let leafs2 = [];
+        let leafs2 = new NoDupArray();
         for(let node of leafs){
             let str = node.str;
             //sort the offspring in ascending order
@@ -162,22 +160,106 @@ let findsubstrs = function(str0){
                 }
             }
         }
-        leafs = leafs2;
-        if(duplicateFlag){
-            console.log(leafs);
-            //break;
-        }
+        leafs = leafs2.arr;
+        //if(duplicateFlag){
+        //    console.log(leafs);
+        //    //break;
+        //}
     }
     
-    console.log(JSON.stringify(root));
-    console.log(histogram.map(h=>h.str));
+    cleanupTree(root);
+    
+    //console.log(JSON.stringify(root));
     //clean up the tree (direct offspring with the same size will be shortened)
     //yet to be implemented
     
+    //console.log("\n\n\n");
+    let allNodes = getAllTreeNodes(root).map(cleanupNode)/*.filter(node=>node.cnt > 1)*/.sort((n1,n2)=>n2.cnt-n1.cnt);
+    
+    //console.log(allNodes.map(node=>[node.str,node.cnt]));
+    return {allNodes,root};
+};
+
+//array like object to dedup and count
+class ObjTally{
+    arr = [];
+    objmap = new Map();
+    constructor(arr0 = []){
+        for(let v of arr0){
+            this.push(v);
+        }
+    }
+    get(i){
+        return this.arr[i];
+    }
+    push(obj){
+        let {arr,objmap} = this;
+        if(objmap.has(obj)){
+            obj.cnt++;
+            return null;
+        }
+        objmap.set(obj,true);
+        arr.push(obj);
+        obj.cnt = 1;
+        return obj;
+    }
 };
 
 
+ObjTally.prototype[Symbol.iterator] = function() {
+    let i = 0;
+    let arr = this.arr;
+    return {
+        next: function() {
+           return { value: arr[i++], done: i > arr.length }
+        }
+    };
+};
 
+//dedup
+let getAllTreeNodes = function(root){
+    let arr = new ObjTally();
+    //recursion function
+    let fn = function(node){
+        arr.push(node);
+        let {children} = node;
+        for(let subnode of children){
+            fn(subnode);
+        }
+    };
+    fn(root);
+    return arr.arr;
+};
+
+
+let cleanupNode = function(node){
+    for(let key in node){
+        if(key !== "children" && key !== "str" && key !== "cnt"){
+            delete node[key];
+        }
+    }
+    return node;
+};
+
+let cleanupTree = function(root){
+    console.log("cleaning tree");
+    let fn = function(node){
+        let children = node.children;
+        for(let i = 0; i < children.length; i++){
+            let subnode = children[i];
+            while(subnode.children.length === 1 && subnode.children[0].str.length === subnode.str.length){
+                //console.log("chain found!");
+                subnode = subnode.children[0];
+            }
+            children[i] = subnode;
+            fn(subnode);
+        }
+    }
+    fn(root);
+};
+
+
+let mandeltxt = (fs.readFileSync("mandelbrot.bf")+"").split("").filter(c=>c.match(/[\+\-\<\>\[\]\.\,]/)).join("");
 
 
 
