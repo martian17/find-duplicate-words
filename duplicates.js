@@ -1,39 +1,20 @@
+let NoDupArray = require("./NoDupArray.js");
+let {newarr,getSecondMax} = require("./utils.js");
 
 
-
-let newarr = function(n){
-    let arr = [];
-    for(let i = 0; i < n; i++){
-        arr.push(n);
-    }
-    return arr;
-};
-
-
-let getSecondMax = function(arr){
-    let max1 = 0;
-    let max2 = 0;
-    for(let v of arr){
-        if(v > max1){
-            max2 = v;
-            max1 = v;
-        }else if(v > max2){
-            max2 = v;
-        }
-    }
-    return max2;
-};
 
 class Node{
     children = [];//if edge node this will be empty
     constructor(str){
         this.str = str;
+        this.v = Math.random();
     }
     refreshStates(){
         this.states = newarr(this.str.length);
     }
     setStates(i,width){
-        for(; i < i+width; i++){
+        let end = i+width;
+        for(; i < end; i++){
             if(i < 0)continue;
             this.states[i] = 1;
         }
@@ -45,9 +26,12 @@ class Node{
 let findsubstrs = function(str0){
     let root = new Node(str0);
     let leafs = [root];
+    console.log(leafs);
     let histogram = [];
     
     for(let width = Math.floor(str0.length/2); width > 0; width--){
+        console.log("width: ",width);
+        //console.log(leafs);
         //contains all substrings at this level
         let strmap = {};
         let duplicatemap = {};
@@ -62,9 +46,8 @@ let findsubstrs = function(str0){
             for(let offset = 0; offset < width; offset++){
             if(singleFlag && offset+i*2 > str.length)continue;//all sections would overlap with each other so no use
             for(let i = offset; i <= str.length-width; i += width){
-            
+                //if(width === 16)console.log(i,str.length,width);
                 let substr = str.slice(i,i+width);
-                console.log(substr);
                 if(!(substr in strmap)){//first time
                     strmap[substr] = [nodeptr,i];
                 }else if(!(substr in duplicatemap)){//second time
@@ -94,18 +77,44 @@ let findsubstrs = function(str0){
             }
         });
         
+        let duplicateFlag = false;
         //mapping the locations to child nodes
         for(let dup of duplicates){
+            //sorting locations
+            dup.locations = dup.locations.sort(([p1,i1],[p2,i2])=>{
+                if(p1 !== p2){
+                    return p1 - p2;
+                }else{
+                    return i1 - i2;
+                }
+            });
+            if(dup.str === ">[-]>[-]>[-]>[-]"){
+                console.log(width,dup.locations);
+            }
+            //collision check with existing duplicates
             dup.locations = dup.locations.filter(([nodeptr,i])=>{
                 let node = leafs[nodeptr];
                 return node.states[i] === 0;
+            });
+            //again self collision check;
+            let prevptr = -1;
+            let previ = -1;
+            dup.locations = dup.locations.filter(([nodeptr,i])=>{
+                let node = leafs[nodeptr];
+                if(prevptr === nodeptr && i < previ+width){
+                    return false;
+                }
+                prevptr = nodeptr;
+                previ = i;
+                return true;
             });
             //is size 1 or 0 skip
             if(dup.locations.length < 2){
                 continue;//not big enough
             }
+            duplicateFlag = true;
             //                    //parent node pointer     slicing parent node pointer
-            let subnodestr = leafs[dup.locations[0][0]].str.slice(i,width);
+            let subnodestr = leafs[dup.locations[0][0]].str.slice(dup.locations[0][1],dup.locations[0][1]+width);
             let subnode = new Node(subnodestr);
             histogram.push(subnode);
             for(let [nodeptr,i] of dup.locations){
@@ -113,6 +122,10 @@ let findsubstrs = function(str0){
                 node.setStates(i-width+1,width*2-1);//blanking out the section it occupies plus the width offset before so it doesn't collide
                 node.children.push([subnode,i]);
             }
+        }
+        
+        if(duplicateFlag){
+            console.log(duplicates,duplicates[0].locations);
         }
         
         let leafs2 = [];
@@ -129,6 +142,7 @@ let findsubstrs = function(str0){
                 let children2 = [];
                 node.children = children2;
                 let prev = 0;//previous ending
+                //console.log("0: ",offsprings);
                 for(let [subnode,i] of offsprings){
                     //string section
                     if(prev !== i){
@@ -138,18 +152,24 @@ let findsubstrs = function(str0){
                     }
                     children2.push(subnode);
                     leafs2.push(subnode);
+                    prev = i+subnode.str.length;
                 }
                 //tail string
-                if(offsprings[offsprings.length-1][1] < str.length-1){
-                    let strnode = new Node(str.slice(offsprings[offsprings.length-1][1],str.length));
+                if(offsprings[offsprings.length-1][1]+width < str.length){
+                    let strnode = new Node(str.slice(offsprings[offsprings.length-1][1]+width,str.length));
                     children2.push(strnode);
                     leafs2.push(strnode);
                 }
             }
         }
         leafs = leafs2;
+        if(duplicateFlag){
+            console.log(leafs);
+            //break;
+        }
     }
     
+    console.log(JSON.stringify(root));
     console.log(histogram.map(h=>h.str));
     //clean up the tree (direct offspring with the same size will be shortened)
     //yet to be implemented
